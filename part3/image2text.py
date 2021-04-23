@@ -3,9 +3,11 @@
 # Perform optical character recognition, usage:
 #     python3 ./image2text.py train-image-file.png train-text.txt test-image-file.png
 # 
-# Authors: (insert names here)
+# Authors:
 # (based on skeleton code by D. Crandall, Oct 2020)
 #
+import math
+import operator
 
 from PIL import Image, ImageDraw, ImageFont
 import sys
@@ -46,16 +48,63 @@ test_letters = load_letters(test_img_fname)
 # Each training letter is now stored as a list of characters, where black
 #  dots are represented by *'s and white dots are spaces. For example,
 #  here's what "a" looks like:
-print("\n".join([ r for r in train_letters['a'] ]))
+# print("\n".join([ r for r in train_letters['a'] ]))
 
 # Same with test letters. Here's what the third letter of the test data
 #  looks like:
-print("\n".join([ r for r in test_letters[2] ]))
+# print("\n".join([ r for r in test_letters[2] ]))
 
+#function to read the train_txt file
+def reading_the_data():
+    data_list=[]
+    filename=train_txt_fname
+    file=open(filename, 'r')
+    for fline in file:
+        #parsing
+        text_seen=tuple([letter for letter in fline.split()])
+        data_list+=[[text_seen]]
+    return data_list
+
+#checking to see what each pixel has;
+#if space-' ', increasing the #spaces by 1
+#if the testing letters is the same as the train letter, increasing the hit_count by 1
+#else, miss_count++
+def bayes_net_comparison( test_letters):
+    TRAIN_LETTERS="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789(),.-!?\"' "
+    letter_determined={}
+    for i in TRAIN_LETTERS:
+        hit_count=0
+        spaces=0
+        miss_count=1
+        for idx in range(0, len(test_letters)):
+            for img_pixel in range(0, len(test_letters[idx])):
+                if train_letters[i][idx][img_pixel]==' ' and test_letters[idx][img_pixel]==' ':
+                    spaces+=1
+                else:
+                    if train_letters[i][idx][img_pixel]== test_letters[idx][img_pixel]:
+                        hit_count +=1
+                    else:
+                        miss_count +=1
+        # still working on this probability factor
+        letter_determined[' ']=0.5
+        #340 because total pixels=350, so asssigning a high probability if spaces>340-based on trial and error
+        if spaces >340:
+            letter_determined[i]=spaces/float(14*25)
+        else:
+            letter_determined[i]=hit_count/float(miss_count)
+    return max(letter_determined.items(), key=operator.itemgetter(1))[0]
+
+def simple_bayes(test_letters):
+    line= ''
+    for each_letter in test_letters:
+        line+= bayes_net_comparison(each_letter)
+        # print(bayes_net_comparison(each_letter))
+    return line
 
 
 # The final two lines of your output should look something like this:
-print("Simple: " + "Sample s1mple resu1t")
-print("   HMM: " + "Sample simple result") 
+print("Simple: " + simple_bayes(test_letters) )
+# print("   HMM: " + hmm_map(test_letters))
+
 
 
