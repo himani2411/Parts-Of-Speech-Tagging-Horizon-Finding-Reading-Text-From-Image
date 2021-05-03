@@ -100,7 +100,7 @@ def get_probability(edge_strength, probability_table, previous_max_pixel_table ,
                         # this keeps track of the row indexes at which we found the maximum intensity in a column
                         previous_max_pixel_table[rows][column] = rows + immediate_row
                     # Below Commented code gives a Overflow error
-                    # probability_table[row][col] = (((edge_strength[row][col] / sum(edge_strength[0:total_row_len, col]))) * (maximum_intensity_pixel_prob))
+                    # probability_table[row][col] = (((edge_strength[rows][column] / sum(edge_strength[0:total_row_len, column]))) * (maximum_intensity_pixel_prob))
                     probability_table[rows][column] = (emission_prob/1000) * (maximum_intensity_pixel_prob)
 
     return (probability_table, previous_max_pixel_table )
