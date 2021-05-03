@@ -16,7 +16,7 @@ import sys
 import imageio
 from numpy import array, zeros, sqrt, where, log
 
-# Class which has stored the transition and the probability table
+# Class which has stored the transition and the probability table and backtracking table
 class mountain:
     # What should your transition probabilities look like? It’s up to you, but you probably want to
     # use a distribution that encourages “smoothness,” i.e. that P(si+1|si) is high if si+1 = si and is low otherwise
@@ -30,8 +30,8 @@ class mountain:
         transition_probabilities = [0.9, 0.75, 0.2, 0.01, 0.005, 0.0004]
         # Array which will stores the probabilities ( Default Initialization)
         pixel_probability_table = zeros((10000,10000))
-
-
+        # Array to store all the y indexes( row index) of every column where we found the maximum probability ( Default Initialization)
+        backtracking_table = zeros((10000,10000))
 
 # calculate "Edge strength map" of an image
 #
@@ -202,7 +202,8 @@ mountain_obj = mountain()
 initial_pixel_prob = get_initial_pixel_probability(edge_strength, total_row_len, total_col_len)
 # Initializing the table which will keep track of all the row indexes where we found the maximum probability of being a ridge
 # Used for backtracking
-previous_max_pixel_table = zeros((total_row_len, total_col_len))
+mountain_obj.backtracking_table = zeros(edge_strength.shape)
+previous_max_pixel_table = mountain_obj.backtracking_table
 
 second_ridge = zeros(total_col_len)
 
