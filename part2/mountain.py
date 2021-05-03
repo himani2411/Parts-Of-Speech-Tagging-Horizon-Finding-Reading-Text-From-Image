@@ -88,7 +88,7 @@ def get_probability(edge_strength, probability_table, previous_max_pixel_table ,
     for column in range(col_start,  col_end, col_step):
         for rows in range(row_start, row_end, row_step):
             maximum_intensity_pixel_prob = 0
-
+            # Loop keps track of rows which I need to scan. So we scan only top and botton 5 rows
             for immediate_row in range(-transition_start, transition_start + 1, 1):
                 if ((rows + immediate_row < total_row_len) & (rows + immediate_row >= 0)):
                     # We have kept the emission probability as the light intensity value from the edge strength matrix
@@ -231,6 +231,7 @@ third_ridge = [total_row_len /2] * total_col_len
 # previous_max_pixel_table_back = previous_max_pixel_table.copy()
 probability_table[0:total_row_len,gt_col] = 0
 probability_table[gt_row][gt_col] = 1
+
 # checking and calculating the probabilities in forward motion
 (third_ridge, probability_table_forw, previous_max_pixel_table_forw) = viterbi(edge_strength, probability_table,
                                                                                      previous_max_pixel_table,
@@ -239,7 +240,6 @@ probability_table[gt_row][gt_col] = 1
                                                                                      0, total_row_len, 1,
                                                                                      gt_col + 1, total_col_len, 1,
                                                                                      transition_rows)
-
 # checking and calculating the probabilities in backward motion
 (third_ridge, probability_table, previous_max_pixel_table) = viterbi(edge_strength, probability_table,
                                                                                     previous_max_pixel_table, third_ridge,
