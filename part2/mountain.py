@@ -5,16 +5,32 @@
 # Mountain ridge finder
 # Based on skeleton code by D. Crandall, April 2021
 #
-
+import math
 
 from PIL import Image
 from numpy import *
 # from numpy.core import amax
-from numpy.ma import amax, argmax
+from numpy.ma import amax, argmax, argmin
 from scipy.ndimage import filters
 import sys
 import imageio
-from numpy import array, zeros, sqrt, where
+from numpy import array, zeros, sqrt, where, log
+
+# Class which has stored the transition and the probability table
+class mountain:
+    # What should your transition probabilities look like? It’s up to you, but you probably want to
+    # use a distribution that encourages “smoothness,” i.e. that P(si+1|si) is high if si+1 = si and is low otherwise
+    # We assumed transition probability values
+    # the pixel in same row has high chance of being in the ridgeLine so I have kept the transition probability as 0.9
+    # if pixel is in a immediate row above or below
+    # we keep on decreasing the transition probabilities as we go away from the pixel which we are considering
+    # for all the other rows we will not calculate their probabilities as the chance of them being in the ridge line are low
+
+
+        transition_probabilities = [0.9, 0.75, 0.2, 0.01, 0.005, 0.0004]
+        # Array which will stores the probabilities ( Default Initialization)
+        pixel_probability_table = zeros((10000,10000))
+
 
 
 # calculate "Edge strength map" of an image
@@ -45,48 +61,102 @@ def draw_edge(image, y_coordinates, color, thickness):
 
 
 # Getting an array which will store the probabilities for every pixel.
-# In this function we will only get the probability of first column in the array
+# In this function we will only get the probability of first column (so all its rows) in the array
 def get_initial_pixel_probability(edge_strength, total_row_len, total_col_len):
-    #Array which will stores the probabilities
-    initial_pixel_prob = zeros(edge_strength.shape)
-    column_total = zeros(total_col_len)
-    # sums up the edge strength values per column
-    for col in range(total_col_len):
-        column_total[col] = sum(edge_strength[0:total_row_len, col])
 
-    # calculating the initial probabilities. i.e Only first column of the image
+    # Array which will stores the probabilities
+    # Re initializing the array to the size of the image we have
+    mountain_obj.pixel_prob = zeros(edge_strength.shape)
+    initial_pixel_prob = mountain_obj.pixel_probability_table
+
+    # sums up the edge strength values of first column of the image
+    column_total = sum(edge_strength[0:total_row_len, 0])
+
+
+    # calculating the initial probabilities. i.e Only for first column of the image
     for row in range(total_row_len):
-        initial_pixel_prob[row][0] = edge_strength[row][col] / column_total[0]
+        initial_pixel_prob[row][0] = (edge_strength[row][0] / column_total)
 
     return  initial_pixel_prob
 
-#Calculating probability of each pixel where we have set a value for checking only a few rows up and
+# Calculating probability of each pixel where we have set a value for checking only a few rows up and
 # below the pixel to check its worth of being a Earth Sky horizon
-def get_transition_probability(probability_table, previous_max_pixel_table , total_row_len, total_col_len, row_start, row_end, row_step,
-                          col_start,  col_end, col_step):
+# Probability = Initial probability * transition probability * emission probability
+def get_probability(edge_strength, probability_table, previous_max_pixel_table , total_row_len, total_col_len, row_start, row_end, row_step,
+                          col_start,  col_end, col_step, transition_start):
 
-    for col in range(col_start,  col_end, col_step):
-        for row in range(row_start, row_end, row_step):
+    for column in range(col_start,  col_end, col_step):
+        for rows in range(row_start, row_end, row_step):
             maximum_intensity_pixel_prob = 0
-            for j in range(-5, 6, 1):
-                if ((row + j < total_row_len) & (row + j >= 0)):
-                    if (maximum_intensity_pixel_prob < probability_table[row + j][col - col_step] * (transition_probabilities[abs(j)])):
-                        maximum_intensity_pixel_prob = (probability_table[row + j][col - col_step]) * (transition_probabilities[abs(j)])
-                        # array which will be useful in backtracking
-                        previous_max_pixel_table[row][col] = row + j
-                    probability_table[row][col] = (edge_strength[row][col] / 100) * (maximum_intensity_pixel_prob)
+
+            for immediate_row in range(-transition_start, transition_start + 1, 1):
+                if ((rows + immediate_row < total_row_len) & (rows + immediate_row >= 0)):
+                    # We have kept the emission probability as the light intensity value from the edge strength matrix
+                    emission_prob = edge_strength[rows][column]
+                    pixel_probability = (probability_table[rows + immediate_row][column - col_step]) * (mountain_obj.transition_probabilities[abs(immediate_row)])
+                    if (maximum_intensity_pixel_prob < pixel_probability):
+                        maximum_intensity_pixel_prob = pixel_probability
+                        # array which will be useful in backtracking for the solution,
+                        # this keeps track of the row indexes at which we found the maximum intensity in a column
+                        previous_max_pixel_table[rows][column] = rows + immediate_row
+                    # Below Commented code gives a Overflow error
+                    # probability_table[row][col] = (((edge_strength[row][col] / sum(edge_strength[0:total_row_len, col]))) * (maximum_intensity_pixel_prob))
+                    probability_table[rows][column] = (emission_prob/1000) * (maximum_intensity_pixel_prob)
 
     return (probability_table, previous_max_pixel_table )
 
 
-# Function is useful in backtracking to the previous columns maximum value which is stored in array during the transition probability
+# Function is useful in backtracking to the previous columns maximum value( i.e the row at which the maximum intensity was captured)
+# which is stored in array during the probability calculations
 def backtracking(ridge_line, maximum_intensity_pixel_prob, previous_max_pixel_table, total_col_len):
-    for col in range(total_col_len - 1, -1, -1):
-        ridge_line[col] = int(maximum_intensity_pixel_prob)
-        maximum_intensity_pixel_prob = previous_max_pixel_table[int(maximum_intensity_pixel_prob)][col]
+    # We scan from right to left of the image
+    for column in range(total_col_len - 1, -1, -1):
+        ridge_line[column] = int(maximum_intensity_pixel_prob)
+        # We have stored the row index in below table to keep track of the maximum intensity row
+        maximum_intensity_pixel_prob = previous_max_pixel_table[int(maximum_intensity_pixel_prob)][column]
 
     return (ridge_line, previous_max_pixel_table)
 
+
+# We follow the viterbi algorith where we calculate all the probabilities of pixel's and store their values in a table.
+# We use this dynamic programming methodology to reduce recalculations of probabilities.
+# Find the maximum probability for the last column of image( i.e scan all the rows of the last column)
+# and find the index( i.e the row index) at which we found the maximum value.
+# Using this index, we backtrack to the first column of image backtrack to the solutions
+def viterbi(edge_strength, initial_pixel_prob, previous_max_pixel_table, ridge, total_row_len, total_col_len, row_start, row_end, row_step,
+                          col_start,  col_end, col_step, transition_start ):
+
+
+    (probability_table, previous_max_pixel_table) = get_probability(edge_strength, initial_pixel_prob,
+                                                                               previous_max_pixel_table, total_row_len,
+                                                                               total_col_len, row_start, row_end, row_step,
+                                                                            col_start,  col_end, col_step, transition_start)
+
+    # Index (row) of Maximum intensity pixel of the last column. So that we can backtrack from right to left of the image
+    maximum_intensity_pixel_prob = argmax(probability_table[0:total_row_len, total_col_len - 1])
+
+    (ridge, previous_max_pixel_table) = backtracking(second_ridge, maximum_intensity_pixel_prob,
+                                                            previous_max_pixel_table, total_col_len)
+
+    return (ridge, probability_table, previous_max_pixel_table)
+
+
+# We find the row index at which we get maximum intensity of light for all the columns of the image
+def bayes_net(edge_strength, total_row_len, total_col_len):
+    ridge_line = []
+    # (total_row_len, total_col_len) = edge_strength.shape
+    for i in range(0, total_col_len):
+        # Getting all the values of a column in a list
+        single_row = edge_strength[0:total_row_len, i].flatten()
+        single_row = list(single_row)
+        # Getting the maximum value ( intensity value) of a single column and getting the index (row index)
+        # at which it will have highest intensity in the image
+        highest_intensity_col = single_row.index(max(single_row))
+        # Appending this in a list to keep track of the row co-ordinates( y)
+        ridge_line.append(highest_intensity_col)
+
+    # imageio.imwrite("output_first.jpg", draw_edge(input_image, ridge_line, (255, 0, 0), 5))
+    return ridge_line
 
 
 # main program
@@ -104,6 +174,7 @@ else:
 # load in image
 input_image = Image.open(input_filename)
 
+# Changing the type from str class to int
 gt_row, gt_col = int(gt_row), int(gt_col)
 
 
@@ -118,64 +189,66 @@ imageio.imwrite('edges.jpg', uint8(255 * edge_strength / (amax(edge_strength))))
 #
 # First Solution : Bayes Net
 
-ridge_line =[]
 (total_row_len, total_col_len) = edge_strength.shape
-for i in range(0, total_col_len):
-    #Getting all the values of a column in a list
-    single_row = edge_strength[0:total_row_len, i].flatten()
-    single_row = list(single_row)
-    # Getting the maximum value ( intensity value) of a single column and getting the index (row index)
-    # at which it will have highest intensity in the image
-    highest_intensity_col = single_row.index(max(single_row))
-    # Appending this in a list to keep track of the row co-ordinates( y)
-    ridge_line.append(highest_intensity_col)
+ridge_line = bayes_net(edge_strength, total_row_len, total_col_len)
 
 
 imageio.imwrite("output_first.jpg", draw_edge(input_image, ridge_line, (255, 0, 0), 5))
 
 #Second Solution : Viterbi Approach
 
-
-# Assumed transition probability values
-# the pixel in same row has high chance of bring in the ridgeLine so I have kept the transition probability as 0.8
-# if pixel is in a row above or below we keep on decreasing the transition probabilities
-# for all the other rows we will not calculate their probabilities as the chance of them being in the ridge line are low
-transition_probabilities = [0.8, 0.5, 0.2, 0.05, 0.005, 0.0005]
-
+# Class which has stored the transition and the probability table
+mountain_obj = mountain()
 initial_pixel_prob = get_initial_pixel_probability(edge_strength, total_row_len, total_col_len)
-
-
+# Initializing the table which will keep track of all the row indexes where we found the maximum probability of being a ridge
+# Used for backtracking
 previous_max_pixel_table = zeros((total_row_len, total_col_len))
-(probability_table, previous_max_pixel_table ) = get_transition_probability(initial_pixel_prob, previous_max_pixel_table ,total_row_len, total_col_len, 0, total_row_len, 1, 1, total_col_len, 1)
 
-
-# MAximum intensity pixel is stored
-maximum_intensity_pixel_prob = argmax(probability_table[:, total_col_len - 1])
 second_ridge = zeros(total_col_len)
-(second_ridge, previous_max_pixel_table ) = backtracking(second_ridge, maximum_intensity_pixel_prob, previous_max_pixel_table, total_col_len)
 
+# We will traverse for only these rows while calculating the probabailities.
+# We dont need to travell all the rows of a column as the ridge will need to be a continous line.
+# The probability of finding a ridge in the 0th row when in the previous column's pixel we found it at 50th row is very low
+transition_rows = len(mountain_obj.transition_probabilities)-1
+
+(second_ridge_final, probability_table, previous_max_pixel_table) = viterbi(edge_strength, initial_pixel_prob,
+                                                                            previous_max_pixel_table, second_ridge,
+                                                                            total_row_len, total_col_len,
+                                                                            0, total_row_len, 1,
+                                                                            1, total_col_len, 1, transition_rows )
+# This will draw the edge on the original image
 input_image = Image.open(input_filename)
 
 imageio.imwrite("output_second.jpg", draw_edge(input_image, second_ridge, (0, 0, 255), 5))
 
 # Third Solution: Taking human input for rows and Columns With viterbi
-third_ridge = [total_row_len / 6] * total_col_len
+third_ridge = [total_row_len /2] * total_col_len
 
 
 # using human input values to reset the probabilities
+# probability_table_back = probability_table.copy()
+# previous_max_pixel_table_back = previous_max_pixel_table.copy()
 probability_table[0:total_row_len,gt_col] = 0
 probability_table[gt_row][gt_col] = 1
+# checking and calculating the probabilities in forward motion
+(third_ridge, probability_table_forw, previous_max_pixel_table_forw) = viterbi(edge_strength, probability_table,
+                                                                                     previous_max_pixel_table,
+                                                                                     third_ridge, total_row_len,
+                                                                                     total_col_len,
+                                                                                     0, total_row_len, 1,
+                                                                                     gt_col + 1, total_col_len, 1,
+                                                                                     transition_rows)
 
 # checking and calculating the probabilities in backward motion
-(state_probab, previous_max_pixel_table ) = \
-    get_transition_probability(probability_table, previous_max_pixel_table, total_row_len,total_col_len,(total_row_len - 1), -1, -1,(gt_col - 1), 0, -1)
+(third_ridge, probability_table, previous_max_pixel_table) = viterbi(edge_strength, probability_table,
+                                                                                    previous_max_pixel_table, third_ridge,
+                                                                                    total_row_len, total_col_len,
+                                                                                    (total_row_len - 1), -1, -1,
+                                                                                    (gt_col - 1), 0, -1,
+                                                                                    transition_rows)
 
-# checking and calculating the probabilities in forward motion
-(state_probab, previous_max_pixel_table ) = get_transition_probability(state_probab, previous_max_pixel_table ,total_row_len,total_col_len, 0, total_row_len, 1,gt_col + 1, total_col_len, 1)
 
-# backtracking to find solution
-maximum_intensity_pixel = argmax(state_probab[:, total_col_len - 1])
-(third_ridge, previous_max_pixel_table ) = backtracking(third_ridge, maximum_intensity_pixel, previous_max_pixel_table , total_col_len)
 
+# This will draw the edge on the original image
 input_image = Image.open(input_filename)
 imageio.imwrite("output_third.jpg", draw_edge(input_image, third_ridge, (0, 255, 0), 5))
